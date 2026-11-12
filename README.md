@@ -17,6 +17,16 @@ The workspace sidebar gets a star control on every session row: rate a session f
 
 ## Install
 
+### From GitHub
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-stars
+```
+
+Reload the Web UI page after installing.
+
+### From a local checkout
+
 This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with the Plugin Manager:
 
 1. Ask the DSH agent to install this bundle from the project directory (it calls `plugin_manager` with `action: install_bundle` and the absolute package path).

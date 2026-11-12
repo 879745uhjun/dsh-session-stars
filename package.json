@@ -37,6 +37,15 @@
     "test": "node test/host.test.mjs"
   },
   "license": "MIT",
+  "author": "879745uhjun",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/879745uhjun/dsh-session-stars.git"
+  },
+  "homepage": "https://github.com/879745uhjun/dsh-session-stars#readme",
+  "bugs": {
+    "url": "https://github.com/879745uhjun/dsh-session-stars/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

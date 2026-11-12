@@ -17,6 +17,16 @@
 
 ## 安装
 
+### 从 GitHub 安装
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-stars
+```
+
+装好后刷新 Web 页面。
+
+### 从本地目录安装
+
 本包是一个 DSH bundle（`dsh.bundle.patch`），通过插件管理器安装目录：
 
 1. 让 DSH 智能体用 `plugin_manager` 的 `install_bundle` 安装本目录的绝对路径；
