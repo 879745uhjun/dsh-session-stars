@@ -1,0 +1,53 @@
+{
+  "name": "dsh-session-stars",
+  "version": "1.0.0",
+  "description": "Star-rating favorites with five importance levels for sessions in the DeepSeek Harness Web UI.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "sessions",
+    "favorites",
+    "stars",
+    "importance"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.1 <0.2.3-0"
+  },
+  "scripts": {
+    "test": "node test/host.test.mjs"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

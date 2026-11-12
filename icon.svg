@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Session stars">
+  <defs>
+    <linearGradient id="star-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFDE7A"/>
+      <stop offset="1" stop-color="#F2A81D"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#10263A"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="14.5" fill="none" stroke="#2E5070" stroke-width="1"/>
+  <path d="M32 10.5l6.2 12.7 14 2-10.1 9.9 2.4 14-12.5-6.6-12.5 6.6 2.4-14-10.1-9.9 14-2z" fill="url(#star-gold)"/>
+  <circle cx="20" cy="51.5" r="1.9" fill="#FFDE7A"/>
+  <circle cx="26" cy="51.5" r="1.9" fill="#FFDE7A"/>
+  <circle cx="32" cy="51.5" r="1.9" fill="#FFDE7A" opacity="0.85"/>
+  <circle cx="38" cy="51.5" r="1.9" fill="#FFDE7A" opacity="0.55"/>
+  <circle cx="44" cy="51.5" r="1.9" fill="#FFDE7A" opacity="0.3"/>
+</svg>
