@@ -92,6 +92,9 @@ try {
   assert.equal(initial.status, 200)
   assert.deepEqual(initial.json, { ok: true, ratings: {} })
 
+  const crossOriginGet = await call(first.state.routes[0], 'GET', undefined, { origin: 'https://example.com', host: '127.0.0.1:57220' })
+  assert.equal(crossOriginGet.status, 403)
+
   const rated = await call(first.state.routes[0], 'POST', JSON.stringify({ sessionId: 'session-a', stars: 4 }), { origin: 'http://127.0.0.1:57220', host: '127.0.0.1:57220' })
   assert.equal(rated.status, 200)
   assert.equal(rated.json.ratings['session-a'].stars, 4)

@@ -188,16 +188,18 @@ function readMutation(payload) {
 function createRouteHandler(store, log) {
   return async function handleSessionStars(request, response) {
     try {
+      // The browser half is same-origin by construction; refuse any cross-site
+      // caller that a browser marks with an Origin header.
+      if (!isAcceptableOrigin(request)) {
+        sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
+        return
+      }
       if (request.method === 'GET') {
         await store.load()
         sendJson(response, 200, { ok: true, ratings: store.snapshot() })
         return
       }
       if (request.method === 'POST') {
-        if (!isAcceptableOrigin(request)) {
-          sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
-          return
-        }
         let payload
         try {
           payload = JSON.parse(await readBody(request, MAX_BODY_BYTES))
