@@ -21,6 +21,10 @@ export const inject = ['tools']
 
 /** Same-origin route the browser half talks to. */
 const ROUTE = '/session-stars'
+/** Server-Sent Events route that pushes rating changes to every window. */
+const EVENTS_ROUTE = '/session-stars/events'
+/** SSE heartbeat interval; keeps idle proxies and sockets alive. */
+const SSE_HEARTBEAT_MS = 20_000
 /** Highest star count; 1..MAX_STARS rate a session, 0 clears the rating. */
 const MAX_STARS = 5
 /** Rating file format version. */
@@ -86,6 +90,18 @@ function createStore(file, log) {
   let ratings = {}
   let loaded = null
   let writeChain = Promise.resolve()
+  const listeners = new Set()
+
+  function emit() {
+    const snapshot = snapshotRatings(ratings)
+    for (const listener of listeners) {
+      try {
+        listener(snapshot)
+      } catch (error) {
+        log('a ratings listener failed', error)
+      }
+    }
+  }
 
   function load() {
     if (loaded !== null) return loaded
@@ -119,11 +135,18 @@ function createStore(file, log) {
   return {
     load,
     snapshot: () => snapshotRatings(ratings),
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
     async set(sessionId, stars) {
       await load()
       if (stars <= 0) delete ratings[sessionId]
       else ratings[sessionId] = { stars, updatedAt: Date.now() }
       await persist()
+      emit()
       return snapshotRatings(ratings)
     },
   }
@@ -229,6 +252,102 @@ function createRouteHandler(store, log) {
   }
 }
 
+/** Server-Sent Events hub: pushes each committed ratings snapshot to every open window. */
+function createEventHub(store, log) {
+  const clients = new Set()
+  let closed = false
+  let unsubscribe = null
+
+  unsubscribe = store.subscribe((ratings) => {
+    if (closed) return
+    const frame = `event: ratings\ndata: ${JSON.stringify({ ok: true, ratings })}\n\n`
+    for (const client of clients) {
+      try {
+        client.write(frame)
+      } catch {
+        clients.delete(client)
+      }
+    }
+  })
+
+  function attach(request, response) {
+    if (closed) {
+      sendJson(response, 503, { ok: false, error: 'event stream is shutting down' })
+      return
+    }
+    if (request.method !== 'GET') {
+      response.writeHead(405, { allow: 'GET', 'content-type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ ok: false, error: 'method not allowed' }))
+      return
+    }
+    if (!isAcceptableOrigin(request)) {
+      sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
+      return
+    }
+    response.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+    })
+    response.write('retry: 3000\n\n')
+
+    let heartbeat = null
+    let detached = false
+    const cleanup = () => {
+      if (detached) return
+      detached = true
+      if (heartbeat !== null) clearInterval(heartbeat)
+      clients.delete(response)
+    }
+    request.on('close', cleanup)
+    response.on('close', cleanup)
+    heartbeat = setInterval(() => {
+      try {
+        response.write(': ping\n\n')
+      } catch {
+        cleanup()
+      }
+    }, SSE_HEARTBEAT_MS)
+    heartbeat.unref?.()
+
+    void store.load().then(() => {
+      if (detached) return
+      clients.add(response)
+      try {
+        response.write(`event: ratings\ndata: ${JSON.stringify({ ok: true, ratings: store.snapshot() })}\n\n`)
+      } catch {
+        cleanup()
+      }
+    }, (error) => {
+      log('could not start the event stream', error)
+      cleanup()
+      try {
+        response.end()
+      } catch {
+        /* the socket is already gone */
+      }
+    })
+  }
+
+  return {
+    attach,
+    close() {
+      if (closed) return
+      closed = true
+      if (unsubscribe !== null) unsubscribe()
+      for (const client of clients) {
+        try {
+          client.end()
+        } catch {
+          /* the client disconnected first */
+        }
+      }
+      clients.clear()
+    },
+  }
+}
+
 /** The `session_stars` agent tool over the same store. */
 function createTool(store) {
   return {
@@ -292,15 +411,22 @@ export function apply(ctx) {
     : join(homedir(), '.dsh', 'session-stars.json')
   const log = createLogger()
   const store = createStore(file, log)
+  const events = createEventHub(store, log)
+
+  ctx.effect(() => () => events.close(), 'session-stars: event stream')
 
   ctx.effect(() => ctx.tools.register(createTool(store)), 'session-stars: agent tool')
 
   // The browser and desktop compositions mount a web server; other surfaces
   // still get the file-backed tool without an HTTP route.
   ctx.inject(['webServer'], (scope) => {
-    scope.effect(
-      () => scope.webServer.register({ kind: 'exact', path: ROUTE, handler: createRouteHandler(store, log) }),
-      'session-stars: browser route',
-    )
+    scope.effect(() => {
+      const removeRatings = scope.webServer.register({ kind: 'exact', path: ROUTE, handler: createRouteHandler(store, log) })
+      const removeEvents = scope.webServer.register({ kind: 'exact', path: EVENTS_ROUTE, handler: events.attach })
+      return () => {
+        removeEvents()
+        removeRatings()
+      }
+    }, 'session-stars: browser routes')
   })
 }

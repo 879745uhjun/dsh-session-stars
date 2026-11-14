@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { apply } from '../index.js'
 
-/** Minimal Host context capturing the tool and the browser route. */
+/** Minimal Host context capturing the tool and the browser routes. */
 function createFakeContext(home) {
   const state = { tools: [], routes: [] }
   const disposers = []
@@ -72,10 +72,42 @@ function makeResponse() {
   }
 }
 
+/** EventEmitter-shaped response for the streaming route. */
+function makeStreamResponse() {
+  const response = new EventEmitter()
+  response.status = 0
+  response.headers = {}
+  response.body = ''
+  response.writableEnded = false
+  response.writeHead = function writeHead(status, headers) {
+    this.status = status
+    this.headers = headers ?? {}
+  }
+  response.write = function write(chunk) {
+    this.body += String(chunk ?? '')
+    return true
+  }
+  response.end = function end(chunk) {
+    if (chunk !== undefined) this.body += String(chunk)
+    this.writableEnded = true
+    this.emit('close')
+  }
+  response.destroy = () => {}
+  return response
+}
+
 async function call(route, method, body, headers) {
   const response = makeResponse()
   await route.handler(makeRequest(method, body, headers), response)
   return { status: response.status, json: JSON.parse(response.body) }
+}
+
+function parseEvents(body) {
+  return body
+    .split('\n\n')
+    .map((block) => block.split('\n').find((line) => line.startsWith('data: ')))
+    .filter((line) => line !== undefined)
+    .map((line) => JSON.parse(line.slice(6)))
 }
 
 const home = await mkdtemp(join(tmpdir(), 'dsh-session-stars-test-'))
@@ -83,31 +115,54 @@ try {
   const first = createFakeContext(home)
   apply(first.ctx)
 
-  assert.equal(first.state.routes.length, 1, 'one browser route')
-  assert.equal(first.state.routes[0].path, '/session-stars', 'route path')
+  assert.equal(first.state.routes.length, 2, 'two browser routes')
+  const ratingsRoute = first.state.routes.find((route) => route.path === '/session-stars')
+  const eventsRoute = first.state.routes.find((route) => route.path === '/session-stars/events')
+  assert.ok(ratingsRoute, 'ratings route')
+  assert.ok(eventsRoute, 'events route')
   assert.equal(first.state.tools.length, 1, 'one agent tool')
   assert.equal(first.state.tools[0].name, 'session_stars', 'tool name')
 
-  const initial = await call(first.state.routes[0], 'GET')
+  const initial = await call(ratingsRoute, 'GET')
   assert.equal(initial.status, 200)
   assert.deepEqual(initial.json, { ok: true, ratings: {} })
 
-  const crossOriginGet = await call(first.state.routes[0], 'GET', undefined, { origin: 'https://example.com', host: '127.0.0.1:57220' })
+  const crossOriginGet = await call(ratingsRoute, 'GET', undefined, { origin: 'https://example.com', host: '127.0.0.1:57220' })
   assert.equal(crossOriginGet.status, 403)
 
-  const rated = await call(first.state.routes[0], 'POST', JSON.stringify({ sessionId: 'session-a', stars: 4 }), { origin: 'http://127.0.0.1:57220', host: '127.0.0.1:57220' })
+  const stream = makeStreamResponse()
+  eventsRoute.handler(makeRequest('GET'), stream)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.equal(stream.status, 200)
+  assert.match(String(stream.headers['content-type']), /text\/event-stream/)
+  assert.equal(parseEvents(stream.body).length, 1, 'initial snapshot')
+
+  const rated = await call(ratingsRoute, 'POST', JSON.stringify({ sessionId: 'session-a', stars: 4 }), { origin: 'http://127.0.0.1:57220', host: '127.0.0.1:57220' })
   assert.equal(rated.status, 200)
   assert.equal(rated.json.ratings['session-a'].stars, 4)
 
-  const invalid = await call(first.state.routes[0], 'POST', JSON.stringify({ sessionId: 'session-a', stars: 9 }), { host: '127.0.0.1:57220' })
+  const pushed = parseEvents(stream.body)
+  assert.equal(pushed.at(-1)?.ratings?.['session-a']?.stars, 4, 'write pushed to the stream')
+
+  const invalid = await call(ratingsRoute, 'POST', JSON.stringify({ sessionId: 'session-a', stars: 9 }), { host: '127.0.0.1:57220' })
   assert.equal(invalid.status, 400)
 
-  const crossOrigin = await call(first.state.routes[0], 'POST', JSON.stringify({ sessionId: 'session-a', stars: 2 }), { origin: 'https://example.com', host: '127.0.0.1:57220' })
+  const crossOrigin = await call(ratingsRoute, 'POST', JSON.stringify({ sessionId: 'session-a', stars: 2 }), { origin: 'https://example.com', host: '127.0.0.1:57220' })
   assert.equal(crossOrigin.status, 403)
 
-  const cleared = await call(first.state.routes[0], 'POST', JSON.stringify({ sessionId: 'session-a', stars: 0 }), { host: '127.0.0.1:57220' })
+  const cleared = await call(ratingsRoute, 'POST', JSON.stringify({ sessionId: 'session-a', stars: 0 }), { host: '127.0.0.1:57220' })
   assert.equal(cleared.status, 200)
   assert.deepEqual(cleared.json.ratings, {})
+
+  const streamPost = makeStreamResponse()
+  await eventsRoute.handler(makeRequest('POST'), streamPost)
+  assert.equal(streamPost.status, 405)
+
+  const streamCrossOrigin = makeStreamResponse()
+  await eventsRoute.handler(makeRequest('GET', undefined, { origin: 'https://example.com', host: '127.0.0.1:57220' }), streamCrossOrigin)
+  assert.equal(streamCrossOrigin.status, 403)
+
+  stream.emit('close')
 
   const tool = first.state.tools[0]
   const toolSet = await tool.execute({ action: 'set', sessionId: 'session-b', stars: 5 }, { agent: { id: 'agent-session' } })
@@ -133,7 +188,8 @@ try {
   // A second activation over the same home must read the durable file.
   const second = createFakeContext(home)
   apply(second.ctx)
-  const reloaded = await call(second.state.routes[0], 'GET')
+  const secondRatings = second.state.routes.find((route) => route.path === '/session-stars')
+  const reloaded = await call(secondRatings, 'GET')
   assert.equal(reloaded.json.ratings['session-b'].stars, 5)
 
   const stored = JSON.parse(await readFile(join(home, 'session-stars.json'), 'utf8'))
@@ -142,7 +198,7 @@ try {
 
   first.dispose()
   second.dispose()
-  console.log('ok - session-stars Host route, store, and tool')
+  console.log('ok - session-stars Host route, event stream, store, and tool')
 } finally {
   await rm(home, { recursive: true, force: true })
 }
