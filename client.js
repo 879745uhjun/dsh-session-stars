@@ -5,9 +5,9 @@
  * browser:
  *  - a hover action in `sidebar.workspaces.session.row.action` and a row-menu
  *    item in `sidebar.workspaces.session.menu.item` open one compact picker;
- *  - a five-star gauge in `sidebar.session.row.trailing` shows the rating at a
- *    glance, colored by importance and tinted for 4-5 stars;
- *  - the session hover card gains the same gauge plus the localized level;
+ *  - a single small star in `sidebar.session.row.trailing` shows the level by
+ *    color without widening the row; the session hover card keeps the full
+ *    five-star gauge and the localized level;
  *  - the picker offers the stars and a five-step importance scale.
  *
  * Ratings are durable Host data read and written through the same-origin
@@ -320,7 +320,7 @@ window.__ModuleLoader__.load({
      * Components
      * ------------------------------------------------------------------ */
 
-    /** Non-interactive five-star importance gauge after the row's time label. */
+    /** Non-interactive single star after the row's time label; its color is the level. */
     function SessionStarBadge({ sessionId, t }) {
       const stars = useStars(sessionId)
       if (stars === 0) return null
@@ -329,12 +329,12 @@ window.__ModuleLoader__.load({
       return h(
         'span',
         {
-          className: stars >= 4 ? `dsss-badge is-strong dsss-tier-${stars}` : `dsss-badge dsss-tier-${stars}`,
+          className: `dsss-badge dsss-tier-${stars}`,
           title: label,
           'aria-label': label,
           role: 'img',
         },
-        h(StarGauge, { stars, size: 8 }),
+        h(StarGlyph, { size: 11, filled: true }),
       )
     }
 
@@ -604,9 +604,7 @@ window.__ModuleLoader__.load({
       '.dsss-gauge__star{display:inline-flex;align-items:center;justify-content:center}',
       '.dsss-gauge__star.is-off{opacity:.3}',
       '.dsss-badge{display:inline-flex;align-items:center;flex:none;margin-left:3px;vertical-align:middle;',
-      'color:var(--dsss-star,var(--dsw-alias-label-secondary));border-radius:999px}',
-      '.dsss-badge.is-strong{padding:1px 5px 1px 4px;background:color-mix(in srgb, var(--dsss-star) 15%, transparent);',
-      'box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsss-star) 32%, transparent)}',
+      'color:var(--dsss-star,var(--dsw-alias-label-secondary))}',
       '.dsss-hover{display:flex;align-items:center;gap:7px;margin-top:4px;',
       'color:var(--dsss-star,var(--dsw-alias-label-secondary));font-size:12px;line-height:18px}',
       '.dsss-chip{display:inline-flex;align-items:center;height:18px;padding:0 7px;box-sizing:border-box;',

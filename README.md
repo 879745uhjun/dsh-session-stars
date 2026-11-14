@@ -4,13 +4,12 @@ English | [中文](README.zh.md)
 
 Star-rating favorites with five importance levels for sessions in the DeepSeek Harness Web UI.
 
-The workspace sidebar gets a star control on every session row: rate a session from 1 to 5 stars, and the rating is shown as an always-visible five-star gauge. Ratings are stored on the Host in one JSON file, so they survive page reloads, restarts, and web-server port changes.
+The workspace sidebar gets a star control on every session row: rate a session from 1 to 5 stars, and the rating is shown as a single color-coded star that barely takes any width. Ratings are stored on the Host in one JSON file, so they survive page reloads, restarts, and web-server port changes.
 
 ## Features
 
 - **1-5 star importance** — one star is low, five stars is critical. Hovering a session row reveals a star button; the row's `...` menu also carries an **Importance…** item, so the picker is reachable without hovering. Both open the same compact picker.
-- **Obvious importance levels** — every rated row shows a five-star gauge (filled stars plus faint outlines) next to its time label. Levels 1-5 use distinct colors (gray, green, blue, amber, red) and 4-5 star badges get a tinted pill, so the difference is visible without reading the number.
-- **Readable at a glance** — the session hover card shows the same gauge plus a tinted chip with the localized level name.
+- **Obvious importance levels, minimal width** — every rated row shows one small filled star whose color is the level (gray, green, blue, amber, red), so the list stays compact. The session hover card keeps the full five-star gauge plus a tinted chip with the level name.
 - **A real scale in the picker** — the picker pairs five large stars with a five-step importance scale (`Low · Minor · Important · Very important · Critical`), highlights the current level, supports number keys 1-5, and confirms with a brief “Saved”.
 - **Live across windows** — `/session-stars/events` streams each committed change over Server-Sent Events, so every open Web UI window updates immediately; focus refresh stays as a fallback.
 - **Durable Host storage** — ratings live in `~/.dsh/session-stars.json` (or `$DSH_HOME/session-stars.json`). Writes are serialized and published atomically.
@@ -44,7 +43,7 @@ The Host row inserts as `dsh-session-stars`; the browser half is declared by `ds
 | Session row hover actions | Click the star button to open the importance picker. |
 | Session row `...` menu | **Importance…** opens the same picker. |
 | Picker | Five large stars plus the five-step scale; pick 1-5, press `1`-`5`, or clear the rating. `Esc` or a click outside closes it. |
-| Session row trailing badge | Five-star gauge in the importance color; 4-5 stars get a tinted pill. |
+| Session row trailing badge | One small star in the importance color; the title/aria-label carries `N of 5` and the level name. |
 | Session hover card | Gauge plus a tinted chip with the localized level name. |
 | Agent tool `session_stars` | `list` reads ratings, `set` assigns 1-5 stars, `clear` removes one. Omitting `sessionId` targets the calling session. |
 
