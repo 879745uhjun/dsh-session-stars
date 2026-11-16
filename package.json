@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-stars",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Star-rating favorites with five importance levels for sessions in the DeepSeek Harness Web UI.",
   "type": "module",
   "main": "index.js",

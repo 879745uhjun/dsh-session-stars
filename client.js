@@ -3,8 +3,9 @@
  *
  * Adds a 1-5 star importance rating to every session row in the workspace
  * browser:
- *  - a hover action in `sidebar.workspaces.session.row.action` and a row-menu
- *    item in `sidebar.workspaces.session.menu.item` open one compact picker;
+ *  - a row-menu item in `sidebar.workspaces.session.menu.item` opens one
+ *    compact picker; the Session Quickbar plugin owns the hover action strip,
+ *    and its built-in star button toggles the rating on and off;
  *  - a single small star in `sidebar.session.row.trailing` shows the level by
  *    color without widening the row; the session hover card keeps the full
  *    five-star gauge and the localized level;
@@ -339,35 +340,6 @@ window.__ModuleLoader__.load({
     }
 
     /** Hover action: one star button that opens the picker for its row. */
-    function SessionStarAction({ sessionId, displayTitle, t }) {
-      const stars = useStars(sessionId)
-      const level = levelText(t, stars)
-      const label = stars > 0
-        ? t('action.rated', { stars: String(stars), level })
-        : t('action.unrated')
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: stars > 0
-            ? `dsss-actionButton is-rated dsss-tier-${stars}`
-            : 'dsss-actionButton',
-          title: label,
-          'aria-label': label,
-          'aria-haspopup': 'dialog',
-          onPointerDown: (event) => {
-            event.stopPropagation()
-          },
-          onClick: (event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            openEditor(sessionId, displayTitle, event.currentTarget.getBoundingClientRect())
-          },
-        },
-        h(StarGlyph, { size: 14, filled: stars > 0 }),
-      )
-    }
-
     /** Row menu item: opens the same picker without hovering. */
     function SessionStarMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
       const stars = useStars(sessionId)
@@ -611,11 +583,6 @@ window.__ModuleLoader__.load({
       'border-radius:999px;font-size:11.5px;font-weight:500;color:var(--dsss-star);',
       'background:color-mix(in srgb, var(--dsss-star) 16%, transparent);',
       'border:1px solid color-mix(in srgb, var(--dsss-star) 30%, transparent)}',
-      '.dsss-actionButton{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;',
-      'padding:0;border:0;border-radius:var(--dsw-radius-sm,6px);background:transparent;cursor:pointer;flex:none;',
-      'color:var(--dsw-alias-label-secondary)}',
-      '.dsss-actionButton:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
-      '.dsss-actionButton.is-rated{color:var(--dsss-star,var(--dsw-alias-brand-primary))}',
       '.dsss-menu-item{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;',
       'padding:6px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);',
       'font:inherit;font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
@@ -662,7 +629,7 @@ window.__ModuleLoader__.load({
       '.dsss-clear:hover{background:var(--dsw-alias-bg-layer-2)}',
       '.dsss-saved{font-size:12px;color:var(--dsw-alias-state-success-primary)}',
       '.dsss-error{font-size:12px;color:var(--dsw-alias-state-error-primary)}',
-      '.dsss-actionButton:focus-visible,.dsss-menu-item:focus-visible,.dsss-starButton:focus-visible,',
+      '.dsss-menu-item:focus-visible,.dsss-starButton:focus-visible,',
       '.dsss-scale__item:focus-visible,.dsss-card__close:focus-visible,.dsss-clear:focus-visible',
       '{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
     ].join('')
@@ -748,13 +715,6 @@ window.__ModuleLoader__.load({
           order: 100,
           locale: NS,
         }, SessionStarHover))
-
-        ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
-          name: 'sidebar.workspaces.session.row.action',
-          id: 'session-stars',
-          order: 50,
-          locale: NS,
-        }, SessionStarAction))
 
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.menu.item',
