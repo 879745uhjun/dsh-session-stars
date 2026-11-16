@@ -354,20 +354,23 @@ function createTool(store) {
     name: 'session_stars',
     description: 'Read or change the star rating the user assigned to sessions. Stars mark favorite importance: 1 is low, 5 is critical. Use action "list" to read ratings, "set" to assign 1-5 stars, and "clear" to remove a rating. Omit sessionId for set and clear to use the calling session.',
     parameters: {
-      action: {
-        type: 'string',
-        required: true,
-        enum: ['list', 'set', 'clear'],
-        description: 'Operation to perform.',
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'set', 'clear'],
+          description: 'Operation to perform.',
+        },
+        sessionId: {
+          type: 'string',
+          description: 'Target session id. When omitted, set and clear use the calling session.',
+        },
+        stars: {
+          type: 'number',
+          description: 'Importance from 1 (low) to 5 (critical); required for action "set".',
+        },
       },
-      sessionId: {
-        type: 'string',
-        description: 'Target session id. When omitted, set and clear use the calling session.',
-      },
-      stars: {
-        type: 'number',
-        description: 'Importance from 1 (low) to 5 (critical); required for action "set".',
-      },
+      required: ['action'],
     },
     output: {
       schema: { type: 'object' },

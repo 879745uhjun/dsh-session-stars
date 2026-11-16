@@ -123,6 +123,17 @@ try {
   assert.equal(first.state.tools.length, 1, 'one agent tool')
   assert.equal(first.state.tools[0].name, 'session_stars', 'tool name')
 
+  // The registered schema must be a JSON Schema object root: a bare property
+  // table is forwarded verbatim and any keyword-named property breaks the turn.
+  const starsParameters = first.state.tools[0].parameters
+  assert.equal(starsParameters.type, 'object', 'object root')
+  assert.equal(typeof starsParameters.properties, 'object', 'properties map')
+  assert.deepEqual(starsParameters.required, ['action'], 'root required')
+  assert.equal(starsParameters.action, undefined, 'no bare property table')
+  for (const [name, schema] of Object.entries(starsParameters.properties)) {
+    assert.equal(schema.required, undefined, `${name} must not carry property-level required`)
+  }
+
   const initial = await call(ratingsRoute, 'GET')
   assert.equal(initial.status, 200)
   assert.deepEqual(initial.json, { ok: true, ratings: {} })
