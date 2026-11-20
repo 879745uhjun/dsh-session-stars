@@ -49,6 +49,23 @@ The Host row inserts as `dsh-session-stars`; the browser half is declared by `ds
 
 Levels: 1 low, 2 minor, 3 important, 4 very important, 5 critical.
 
+## Self-test
+
+Open **Settings → Plugins → dsh-session-stars**; the detail page shows a **Self-test** section. It runs only when you click **Run self-test** — never on mount — and checks:
+
+1. `GET /session-stars` returns 200 with an object `ratings`;
+2. `/session-stars/events` accepts an SSE connection (marked **Skipped** when the stream is unavailable);
+3. `/session-stars/health` reports the `session_stars` tool as registered.
+
+Every check has a 2s deadline; a failure shows its reason and never blocks the other rows. **Copy result** writes a Markdown checklist from the last run.
+
+The health endpoint is read-only:
+
+```json
+GET /session-stars/health
+{ "ok": true, "tool": "session_stars", "registered": true }
+```
+
 ## Data and interface
 
 - File: `<DSH home>/session-stars.json`, format `{ "version": 1, "updatedAt": <ms>, "ratings": { "<sessionId>": { "stars": 1-5, "updatedAt": <ms> } } }`.
@@ -64,11 +81,10 @@ Levels: 1 low, 2 minor, 3 important, 4 very important, 5 critical.
 ## Development
 
 ```bash
-node --check client.js
-node test/host.test.mjs
+npm test
 ```
 
-The Host test covers the ratings store, the JSON route (including validation and the cross-origin fence), the Server-Sent Events stream, the agent tool, and persistence across remounts.
+`pretest` checks both halves with `node --check`; the test run covers the Host route/event stream/health/tool suite and a client self-test suite (registration metadata, success, single-failure isolation, timeout, Markdown shape).
 
 ## License
 

@@ -49,6 +49,23 @@ dsh plugin --profile desktop add github:879745uhjun/dsh-session-stars
 
 等级：1 低、2 一般、3 重要、4 很重要、5 关键。
 
+## 自检
+
+打开 **设置 → 插件 → dsh-session-stars**，详情页会出现「自检」区块。只有点击「运行自检」才会执行，挂载时不会自动发请求。检查项：
+
+1. `GET /session-stars` 返回 200，且 `ratings` 是对象；
+2. `/session-stars/events` 能建立 SSE 连接（环境不支持或连不上时标记为「跳过」）；
+3. `/session-stars/health` 报告 `session_stars` 工具已注册。
+
+每项 2 秒超时；单项失败只显示原因，不影响其它项。「复制结果」会把上一次运行生成 Markdown 清单。
+
+健康检查是只读接口：
+
+```json
+GET /session-stars/health
+{ "ok": true, "tool": "session_stars", "registered": true }
+```
+
 ## 数据与接口
 
 - 文件：`<DSH home>/session-stars.json`，格式 `{ "version": 1, "updatedAt": <ms>, "ratings": { "<sessionId>": { "stars": 1-5, "updatedAt": <ms> } } }`。
@@ -64,11 +81,10 @@ dsh plugin --profile desktop add github:879745uhjun/dsh-session-stars
 ## 开发
 
 ```bash
-node --check client.js
-node test/host.test.mjs
+npm test
 ```
 
-宿主测试覆盖评级存储、JSON 路由（含参数校验和跨源拦截）、Server-Sent Events 流、智能体工具，以及重新挂载后的持久化。
+`pretest` 先用 `node --check` 检查两半源码；测试覆盖 Host 侧路由/事件流/健康检查/工具，以及客户端自检（注册元数据、成功路径、单项失败隔离、超时、Markdown 形状）。
 
 ## 许可证
 

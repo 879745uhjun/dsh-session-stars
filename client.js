@@ -26,11 +26,13 @@ window.__ModuleLoader__.load({
     const NS = 'session-stars'
     const ENDPOINT = '/session-stars'
     const EVENTS = '/session-stars/events'
+    const HEALTH = '/session-stars/health'
     const MAX_STARS = 5
     const CARD_WIDTH = 300
     const CARD_HEIGHT = 268
     const VIEWPORT_MARGIN = 8
     const SAVED_MS = 1600
+    const SELFTEST_TIMEOUT_MS = 2000
     const LEVEL_KEY = ['', 'level.1', 'level.2', 'level.3', 'level.4', 'level.5']
 
     const EN = {
@@ -55,6 +57,33 @@ window.__ModuleLoader__.load({
       'level.5': 'Critical',
       'error.load': 'Ratings are unavailable',
       'error.save': 'Could not save the rating',
+      'selftest.title': 'Self-test',
+      'selftest.run': 'Run self-test',
+      'selftest.rerun': 'Run again',
+      'selftest.copy': 'Copy result',
+      'selftest.copied': 'Copied',
+      'selftest.idle': 'Not run',
+      'selftest.running': 'Running',
+      'selftest.pass': 'Pass',
+      'selftest.fail': 'Fail',
+      'selftest.skip': 'Skipped',
+      'selftest.summary': '{pass} passed · {fail} failed · {skip} skipped',
+      'selftest.error': 'Could not run the self-test: {error}',
+      'selftest.item.ratings': 'Ratings API',
+      'selftest.item.events': 'Live events',
+      'selftest.item.tool': 'session_stars tool',
+      'selftest.detail.badPayload': 'Unexpected response body',
+      'selftest.detail.ratingsShape': 'ratings is not an object',
+      'selftest.detail.ratingCount': '{count} rated sessions',
+      'selftest.detail.toolMissing': '{tool} is not registered',
+      'selftest.detail.timeout': 'timed out after 2s',
+      'selftest.detail.noEventSource': 'EventSource is unavailable',
+      'selftest.detail.eventsTimeout': 'no events within 2s',
+      'selftest.detail.eventsUnavailable': 'event stream unavailable',
+      'selftest.markdown.title': 'Self-test · {plugin}',
+      'selftest.markdown.passLine': '- [x] {label} — passed',
+      'selftest.markdown.failLine': '- [ ] {label} — failed: {detail}',
+      'selftest.markdown.skipLine': '- [ ] {label} — skipped',
     }
 
     const ZH = {
@@ -79,6 +108,33 @@ window.__ModuleLoader__.load({
       'level.5': '关键',
       'error.load': '星级暂时不可用',
       'error.save': '星级保存失败',
+      'selftest.title': '自检',
+      'selftest.run': '运行自检',
+      'selftest.rerun': '重新运行',
+      'selftest.copy': '复制结果',
+      'selftest.copied': '已复制',
+      'selftest.idle': '未运行',
+      'selftest.running': '运行中',
+      'selftest.pass': '通过',
+      'selftest.fail': '失败',
+      'selftest.skip': '跳过',
+      'selftest.summary': '{pass} 通过 · {fail} 失败 · {skip} 跳过',
+      'selftest.error': '无法运行自检：{error}',
+      'selftest.item.ratings': '评级接口',
+      'selftest.item.events': '实时事件流',
+      'selftest.item.tool': 'session_stars 工具',
+      'selftest.detail.badPayload': '响应内容不符合预期',
+      'selftest.detail.ratingsShape': 'ratings 不是对象',
+      'selftest.detail.ratingCount': '{count} 个已评级会话',
+      'selftest.detail.toolMissing': '{tool} 未注册',
+      'selftest.detail.timeout': '2 秒内未完成',
+      'selftest.detail.noEventSource': '当前环境不支持 EventSource',
+      'selftest.detail.eventsTimeout': '2 秒内没有收到事件',
+      'selftest.detail.eventsUnavailable': '事件流不可用',
+      'selftest.markdown.title': '自检 · {plugin}',
+      'selftest.markdown.passLine': '- [x] {label} — 通过',
+      'selftest.markdown.failLine': '- [ ] {label} — 失败：{detail}',
+      'selftest.markdown.skipLine': '- [ ] {label} — 跳过',
     }
 
     /* ------------------------------------------------------------------ *
@@ -563,6 +619,296 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Self-test (plugins.detail.section)
+     * ------------------------------------------------------------------ */
+
+    function describeError(error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+
+    function selfTestPluginName(subject) {
+      return subject?.kind === 'bundle' ? subject?.pkg?.name : undefined
+    }
+
+    function matchesSelfTestSubject(subject) {
+      return selfTestPluginName(subject) === 'dsh-session-stars'
+    }
+
+    function selfTestItems(t) {
+      return [
+        { id: 'ratings', label: t('selftest.item.ratings'), status: 'idle' },
+        { id: 'events', label: t('selftest.item.events'), status: 'idle' },
+        { id: 'tool', label: t('selftest.item.tool'), status: 'idle' },
+      ]
+    }
+
+    function selfTestSummary(items) {
+      const summary = { pass: 0, fail: 0, skip: 0 }
+      for (const item of items) {
+        if (item.status === 'pass') summary.pass += 1
+        else if (item.status === 'skip') summary.skip += 1
+        else if (item.status === 'fail') summary.fail += 1
+      }
+      return summary
+    }
+
+    function buildSelfTestMarkdown(items, t) {
+      const summary = selfTestSummary(items)
+      const lines = [
+        `## ${t('selftest.markdown.title', { plugin: 'dsh-session-stars' })}`,
+        t('selftest.summary', { pass: String(summary.pass), fail: String(summary.fail), skip: String(summary.skip) }),
+        '',
+      ]
+      for (const item of items) {
+        if (item.status === 'pass') lines.push(t('selftest.markdown.passLine', { label: item.label }))
+        else if (item.status === 'skip') lines.push(t('selftest.markdown.skipLine', { label: item.label }))
+        else lines.push(t('selftest.markdown.failLine', { label: item.label, detail: item.detail ?? '' }))
+      }
+      return lines.join('\n')
+    }
+
+    function selfTestTimeout(t) {
+      return { status: 'fail', detail: t('selftest.detail.timeout') }
+    }
+
+    /** Run one check with a hard per-check deadline. */
+    function withSelfTestTimeout(run, timeoutMs, t) {
+      return new Promise((resolve) => {
+        let settled = false
+        const controller = typeof AbortController === 'function' ? new AbortController() : null
+        const timer = setTimeout(() => {
+          if (settled) return
+          settled = true
+          try {
+            controller?.abort()
+          } catch {
+            /* abort is best effort */
+          }
+          resolve(selfTestTimeout(t))
+        }, timeoutMs)
+        Promise.resolve()
+          .then(() => run(controller?.signal))
+          .then((result) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            resolve(result)
+          }, (error) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            resolve({ status: 'fail', detail: describeError(error) })
+          })
+      })
+    }
+
+    async function selfTestJson(fetchImpl, path, signal) {
+      let response
+      try {
+        response = await fetchImpl(path, { headers: { accept: 'application/json' }, cache: 'no-store', signal })
+      } catch (error) {
+        return { ok: false, detail: describeError(error) }
+      }
+      if (!response || response.ok !== true) return { ok: false, detail: `HTTP ${response?.status ?? '?'}` }
+      const payload = await response.json().catch(() => null)
+      if (payload === null || typeof payload !== 'object') return { ok: false, detail: 'invalid JSON' }
+      return { ok: true, payload }
+    }
+
+    async function runRatingsCheck(fetchImpl, signal, t) {
+      const result = await selfTestJson(fetchImpl, ENDPOINT, signal)
+      if (!result.ok) return { status: 'fail', detail: result.detail }
+      if (result.payload.ok !== true) return { status: 'fail', detail: t('selftest.detail.badPayload') }
+      const ratings = result.payload.ratings
+      if (ratings === null || typeof ratings !== 'object' || Array.isArray(ratings)) {
+        return { status: 'fail', detail: t('selftest.detail.ratingsShape') }
+      }
+      return { status: 'pass', detail: t('selftest.detail.ratingCount', { count: String(Object.keys(ratings).length) }) }
+    }
+
+    async function runToolCheck(fetchImpl, signal, t) {
+      const result = await selfTestJson(fetchImpl, HEALTH, signal)
+      if (!result.ok) return { status: 'fail', detail: result.detail }
+      if (result.payload.ok !== true) return { status: 'fail', detail: t('selftest.detail.badPayload') }
+      const tool = typeof result.payload.tool === 'string' ? result.payload.tool : 'session_stars'
+      if (result.payload.registered !== true) return { status: 'fail', detail: t('selftest.detail.toolMissing', { tool }) }
+      return { status: 'pass', detail: tool }
+    }
+
+    /** The stream check degrades to "skipped" when SSE cannot be observed. */
+    function runEventsCheck(EventSourceImpl, timeoutMs, t) {
+      return new Promise((resolve) => {
+        if (typeof EventSourceImpl !== 'function') {
+          resolve({ status: 'skip', detail: t('selftest.detail.noEventSource') })
+          return
+        }
+        let source = null
+        let settled = false
+        let timer = null
+        const finish = (result) => {
+          if (settled) return
+          settled = true
+          if (timer !== null) clearTimeout(timer)
+          try {
+            source?.close?.()
+          } catch {
+            /* already closed */
+          }
+          resolve(result)
+        }
+        timer = setTimeout(() => finish({ status: 'skip', detail: t('selftest.detail.eventsTimeout') }), timeoutMs)
+        try {
+          source = new EventSourceImpl(EVENTS)
+        } catch (error) {
+          finish({ status: 'skip', detail: describeError(error) })
+          return
+        }
+        source.addEventListener?.('ratings', () => finish({ status: 'pass', detail: '' }))
+        source.addEventListener?.('error', () => finish({ status: 'skip', detail: t('selftest.detail.eventsUnavailable') }))
+      })
+    }
+
+    /**
+     * Run the three read-only self checks. A failed check becomes a row status;
+     * each check owns its deadline so one slow endpoint cannot block the rest.
+     */
+    async function runSelfTest(options = {}) {
+      const fetchImpl = typeof options.fetch === 'function' ? options.fetch : fetch
+      const EventSourceImpl = options.EventSource === undefined
+        ? (typeof EventSource === 'function' ? EventSource : undefined)
+        : options.EventSource
+      const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+        ? options.timeoutMs
+        : SELFTEST_TIMEOUT_MS
+      const t = typeof options.t === 'function' ? options.t : (key) => key
+      const [ratings, events, tool] = await Promise.all([
+        withSelfTestTimeout((signal) => runRatingsCheck(fetchImpl, signal, t), timeoutMs, t),
+        runEventsCheck(EventSourceImpl, timeoutMs, t),
+        withSelfTestTimeout((signal) => runToolCheck(fetchImpl, signal, t), timeoutMs, t),
+      ])
+      const items = [
+        { id: 'ratings', label: t('selftest.item.ratings'), ...ratings },
+        { id: 'events', label: t('selftest.item.events'), ...events },
+        { id: 'tool', label: t('selftest.item.tool'), ...tool },
+      ]
+      return { items, summary: selfTestSummary(items), markdown: buildSelfTestMarkdown(items, t) }
+    }
+
+    function SelfTestSection({ subject, t }) {
+      const [state, setState] = useState(() => ({
+        running: false,
+        items: selfTestItems(t),
+        summary: null,
+        error: null,
+        copied: false,
+        markdown: '',
+      }))
+      const copyTimer = useRef(0)
+      useEffect(() => () => window.clearTimeout(copyTimer.current), [])
+
+      if (!matchesSelfTestSubject(subject)) return null
+
+      const summary = state.running
+        ? t('selftest.running')
+        : state.summary === null
+          ? t('selftest.idle')
+          : t('selftest.summary', {
+            pass: String(state.summary.pass),
+            fail: String(state.summary.fail),
+            skip: String(state.summary.skip),
+          })
+
+      async function run() {
+        setState({
+          running: true,
+          items: selfTestItems(t).map((item) => ({ ...item, status: 'running' })),
+          summary: null,
+          error: null,
+          copied: false,
+          markdown: '',
+        })
+        try {
+          const result = await runSelfTest({ t })
+          setState({
+            running: false,
+            items: result.items,
+            summary: result.summary,
+            error: null,
+            copied: false,
+            markdown: result.markdown,
+          })
+        } catch (error) {
+          const reason = describeError(error)
+          setState({
+            running: false,
+            items: selfTestItems(t).map((item) => ({ ...item, status: 'fail', detail: reason })),
+            summary: { pass: 0, fail: 3, skip: 0 },
+            error: reason,
+            copied: false,
+            markdown: '',
+          })
+        }
+      }
+
+      async function copy() {
+        if (state.markdown === '') return
+        try {
+          await navigator.clipboard.writeText(state.markdown)
+          setState({ ...state, copied: true })
+          window.clearTimeout(copyTimer.current)
+          copyTimer.current = window.setTimeout(() => {
+            setState((current) => ({ ...current, copied: false }))
+          }, 1600)
+        } catch {
+          /* clipboard denied; the result stays on screen */
+        }
+      }
+
+      return h(
+        'section',
+        { className: 'dsss-selfTest', 'data-plugin': 'dsh-session-stars' },
+        h(
+          'div',
+          { className: 'dsss-selfTest__head' },
+          h('span', { className: 'dsss-selfTest__title', children: t('selftest.title') }),
+          h('span', { className: 'dsss-selfTest__summary', children: summary }),
+          h('button', {
+            type: 'button',
+            className: 'dsss-selfTest__button is-primary',
+            disabled: state.running,
+            onClick: () => {
+              void run()
+            },
+          }, state.running ? t('selftest.running') : (state.summary === null ? t('selftest.run') : t('selftest.rerun'))),
+          h('button', {
+            type: 'button',
+            className: 'dsss-selfTest__button',
+            disabled: state.markdown === '',
+            onClick: () => {
+              void copy()
+            },
+          }, state.copied ? t('selftest.copied') : t('selftest.copy')),
+        ),
+        state.error !== null
+          ? h('div', { className: 'dsss-selfTest__error', children: t('selftest.error', { error: state.error }) })
+          : null,
+        h(
+          'div',
+          { className: 'dsss-selfTest__items' },
+          state.items.map((row) => h(
+            'div',
+            { key: row.id, className: 'dsss-selfTest__row' },
+            h('span', { className: 'dsss-selfTest__label', children: row.label }),
+            h('span', { className: `dsss-selfTest__badge is-${row.status}`, children: t(`selftest.${row.status}`) }),
+            typeof row.detail === 'string' && row.detail !== ''
+              ? h('span', { className: 'dsss-selfTest__detail', children: row.detail })
+              : null,
+          )),
+        ),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
      * Styles
      * ------------------------------------------------------------------ */
 
@@ -632,11 +978,43 @@ window.__ModuleLoader__.load({
       '.dsss-menu-item:focus-visible,.dsss-starButton:focus-visible,',
       '.dsss-scale__item:focus-visible,.dsss-card__close:focus-visible,.dsss-clear:focus-visible',
       '{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
+      '.dsss-selfTest{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:12px;',
+      'border-top:.5px solid var(--dsw-alias-border-l2)}',
+      '.dsss-selfTest__head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.dsss-selfTest__title{font-weight:600}',
+      '.dsss-selfTest__summary{flex:1;min-width:0;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.dsss-selfTest__button{display:inline-flex;align-items:center;justify-content:center;height:26px;padding:0 10px;',
+      'border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm,6px);background:transparent;',
+      'color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}',
+      '.dsss-selfTest__button:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}',
+      '.dsss-selfTest__button.is-primary{border-color:transparent;background:var(--dsw-alias-brand-primary);color:#fff}',
+      '.dsss-selfTest__button:disabled{opacity:.45;cursor:default}',
+      '.dsss-selfTest__error{font-size:12px;color:var(--dsw-alias-state-error-primary)}',
+      '.dsss-selfTest__items{display:flex;flex-direction:column;gap:2px}',
+      '.dsss-selfTest__row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0}',
+      '.dsss-selfTest__label{flex:1;min-width:0;font-size:13px}',
+      '.dsss-selfTest__badge{flex:none;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.dsss-selfTest__badge.is-pass{color:var(--dsw-alias-state-success-primary)}',
+      '.dsss-selfTest__badge.is-fail{color:var(--dsw-alias-state-error-primary)}',
+      '.dsss-selfTest__badge.is-skip{color:var(--dsw-alias-state-warn-primary)}',
+      '.dsss-selfTest__detail{flex-basis:100%;font-size:12px;color:var(--dsw-alias-label-secondary)}',
     ].join('')
 
     /* ------------------------------------------------------------------ *
      * Client plugin
      * ------------------------------------------------------------------ */
+
+    const testApi = {
+      matchesSelfTestSubject,
+      runSelfTest,
+      buildSelfTestMarkdown,
+      selfTestItems,
+      en: EN,
+      zh: ZH,
+    }
+    if (typeof window !== 'undefined' && window.__DSH_SESSION_STARS_TEST__ === true) {
+      window.__DSH_SESSION_STARS_TEST_API__ = testApi
+    }
 
     return {
       inject: ['slots', 'locale'],
@@ -729,6 +1107,13 @@ window.__ModuleLoader__.load({
           order: 60,
           locale: NS,
         }, SessionStarDialog))
+
+        ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
+          name: 'plugins.detail.section',
+          id: 'dsh-session-stars.selftest',
+          order: 90,
+          locale: NS,
+        }, SelfTestSection))
       },
     }
   },

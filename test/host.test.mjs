@@ -115,13 +115,23 @@ try {
   const first = createFakeContext(home)
   apply(first.ctx)
 
-  assert.equal(first.state.routes.length, 2, 'two browser routes')
+  assert.equal(first.state.routes.length, 3, 'three browser routes')
   const ratingsRoute = first.state.routes.find((route) => route.path === '/session-stars')
   const eventsRoute = first.state.routes.find((route) => route.path === '/session-stars/events')
+  const healthRoute = first.state.routes.find((route) => route.path === '/session-stars/health')
   assert.ok(ratingsRoute, 'ratings route')
   assert.ok(eventsRoute, 'events route')
+  assert.ok(healthRoute, 'health route')
   assert.equal(first.state.tools.length, 1, 'one agent tool')
   assert.equal(first.state.tools[0].name, 'session_stars', 'tool name')
+
+  const health = await call(healthRoute, 'GET')
+  assert.equal(health.status, 200)
+  assert.deepEqual(health.json, { ok: true, tool: 'session_stars', registered: true })
+  const healthPost = await call(healthRoute, 'POST', JSON.stringify({}))
+  assert.equal(healthPost.status, 405)
+  const healthCrossOrigin = await call(healthRoute, 'GET', undefined, { origin: 'https://example.com', host: '127.0.0.1:57220' })
+  assert.equal(healthCrossOrigin.status, 403)
 
   // The registered schema must be a JSON Schema object root: a bare property
   // table is forwarded verbatim and any keyword-named property breaks the turn.

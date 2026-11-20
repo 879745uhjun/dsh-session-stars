@@ -23,6 +23,8 @@ export const inject = ['tools']
 const ROUTE = '/session-stars'
 /** Server-Sent Events route that pushes rating changes to every window. */
 const EVENTS_ROUTE = '/session-stars/events'
+/** Read-only health route used by the plugin detail page self-test. */
+const HEALTH_ROUTE = '/session-stars/health'
 /** SSE heartbeat interval; keeps idle proxies and sockets alive. */
 const SSE_HEARTBEAT_MS = 20_000
 /** Highest star count; 1..MAX_STARS rate a session, 0 clears the rating. */
@@ -348,6 +350,22 @@ function createEventHub(store, log) {
   }
 }
 
+/** Read-only health answer for the plugin detail page self-test. */
+function createHealthHandler(health) {
+  return function handleSessionStarsHealth(request, response) {
+    if (request.method !== 'GET') {
+      response.writeHead(405, { allow: 'GET', 'content-type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ ok: false, error: 'method not allowed' }))
+      return
+    }
+    if (!isAcceptableOrigin(request)) {
+      sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
+      return
+    }
+    sendJson(response, 200, { ok: true, tool: 'session_stars', registered: health.toolRegistered })
+  }
+}
+
 /** The `session_stars` agent tool over the same store. */
 function createTool(store) {
   return {
@@ -415,10 +433,18 @@ export function apply(ctx) {
   const log = createLogger()
   const store = createStore(file, log)
   const events = createEventHub(store, log)
+  const health = { toolRegistered: false }
 
   ctx.effect(() => () => events.close(), 'session-stars: event stream')
 
-  ctx.effect(() => ctx.tools.register(createTool(store)), 'session-stars: agent tool')
+  ctx.effect(() => {
+    const unregister = ctx.tools.register(createTool(store))
+    health.toolRegistered = true
+    return () => {
+      health.toolRegistered = false
+      unregister()
+    }
+  }, 'session-stars: agent tool')
 
   // The browser and desktop compositions mount a web server; other surfaces
   // still get the file-backed tool without an HTTP route.
@@ -426,7 +452,9 @@ export function apply(ctx) {
     scope.effect(() => {
       const removeRatings = scope.webServer.register({ kind: 'exact', path: ROUTE, handler: createRouteHandler(store, log) })
       const removeEvents = scope.webServer.register({ kind: 'exact', path: EVENTS_ROUTE, handler: events.attach })
+      const removeHealth = scope.webServer.register({ kind: 'exact', path: HEALTH_ROUTE, handler: createHealthHandler(health) })
       return () => {
+        removeHealth()
         removeEvents()
         removeRatings()
       }
