@@ -627,7 +627,13 @@ window.__ModuleLoader__.load({
     }
 
     function selfTestPluginName(subject) {
-      return subject?.kind === 'bundle' ? subject?.pkg?.name : undefined
+      if (subject?.kind === 'bundle') return subject?.pkg?.name
+      if (subject?.kind === 'item' && typeof subject?.id === 'string') {
+        return subject.id === 'dsh-session-stars' || subject.id === 'include:dsh-session-stars'
+          ? 'dsh-session-stars'
+          : undefined
+      }
+      return undefined
     }
 
     function matchesSelfTestSubject(subject) {
